@@ -32,7 +32,7 @@ function DiscoveryV1(options) {
 
   // Check if 'version_date' was provided
   if (typeof this._options.version_date === 'undefined') {
-    throw new Error('Argument error: version_date was not specified, use DiscoveryV1.VERSION_DATE_2017_04_27');
+    throw new Error('Argument error: version_date was not specified, use DiscoveryV1.VERSION_DATE_2017_08_01');
   }
   this._options.qs.version = options.version_date;
 }
@@ -52,6 +52,11 @@ DiscoveryV1.VERSION_DATE_2016_12_15 = '2016-12-15';
  * @type {string}
  */
 DiscoveryV1.VERSION_DATE_2017_04_27 = '2017-04-27';
+/**
+ * Release migrating from Watson Discovery News Original to Watson Discovery News
+ * @type {string}
+ */
+DiscoveryV1.VERSION_DATE_2017_08_01 = '2017-08-01';
 
 /**
  * Return the list of environments
@@ -285,7 +290,7 @@ DiscoveryV1.prototype.getConfiguration = function(params, callback) {
  *
  * @param {Object} params
  * @param {String} params.environment_id
-  */
+ */
 DiscoveryV1.prototype.getCollections = function(params, callback) {
   params = params || {};
 
@@ -339,6 +344,7 @@ DiscoveryV1.prototype.createCollection = function(params, callback) {
   params = params || {};
 
   params.language_code = params.language_code || 'en_us';
+  params.language = params.language || params.language_code;
 
   const parameters = {
     options: {
@@ -348,7 +354,7 @@ DiscoveryV1.prototype.createCollection = function(params, callback) {
       multipart: [
         {
           'content-type': 'application/json',
-          body: JSON.stringify(pick(params, ['name', 'description', 'configuration_id', 'language_code']))
+          body: JSON.stringify(pick(params, ['name', 'description', 'configuration_id', 'language']))
         }
       ],
       json: true
@@ -517,7 +523,7 @@ DiscoveryV1.prototype.addDocument = function(params, callback) {
 };
 
 /**
- * Helper method, similar to addDocument except that the file param expects a JSON object
+ * Helper method, similar to updateDocument except that the file param expects a JSON object
  * @param {object} params
  * @param {String} params.environment_id environment guid for the collection
  * @param {string} params.collection_id the guid of the collection to delete
@@ -528,6 +534,12 @@ DiscoveryV1.prototype.addDocument = function(params, callback) {
  * @return {ReadableStream|undefined}
  */
 DiscoveryV1.prototype.addJsonDocument = function(params, callback) {
+  const fileParamType = typeof params.file;
+
+  if (fileParamType !== 'object') {
+    throw new Error(`Argument error: params.file must be an object, but got ${fileParamType}.`);
+  }
+
   params = Object.assign({}, params, {
     file: {
       value: JSON.stringify(params.file),
@@ -537,6 +549,36 @@ DiscoveryV1.prototype.addJsonDocument = function(params, callback) {
     }
   });
   return this.addDocument(params, callback);
+};
+
+/**
+ * Update or partially update a document to create or replace an existing document
+ * @param params
+ * @param {String} params.environment_id environment guid for the collection
+ * @param {string} params.collection_id the guid of the collection
+ * @param {string} params.document_id the guid of the document to update
+ * @param {Object} params.file non-stringified JSON object
+ * @param {string} [params.configuration_id] config guid
+ * @param {object} [params.metadata] file metadata, including content-type (will infer if missing)
+ * @param callback
+ * @return {ReadableStream|undefined}
+ */
+DiscoveryV1.prototype.updateJsonDocument = function(params, callback) {
+  const fileParamType = typeof params.file;
+
+  if (fileParamType !== 'object') {
+    throw new Error(`Argument error: params.file must be an object, but got ${fileParamType}.`);
+  }
+
+  params = Object.assign({}, params, {
+    file: {
+      value: JSON.stringify(params.file),
+      options: {
+        filename: '_.json'
+      }
+    }
+  });
+  return this.updateDocument(params, callback);
 };
 
 /**
@@ -621,6 +663,9 @@ DiscoveryV1.prototype.deleteDocument = function(params, callback) {
  * @param {String} [params.return] A comma separated list of the portion of the document hierarchy to return.
  * @param {String} [params.sort] A comma separated list of fields in the document to sort on. You can optionally specify a sort direction by prefixing the field with - for descending or + for ascending. Ascending is the default sort direction if no prefix is specified.
  * @param {Boolean} [params.passages=false] BETA - A boolean that specifies whether the service returns a set of the most relevant passages from the documents returned by a query.  The passages parameter works only on private collections. It does not work in the Watson Discovery News collection.
+ * @param {String} [params.passages.fields] A comma-separated list of fields in the index that passages will be drawn from. If this parameter not specified then all top level field are included.
+ * @param {Number} [params.passages.count=10] The maximum number of passages to return. The search will return fewer if that is the total number found. The default is 10. The maximum is 100.
+ * @param {Number} [params.passages.characters=400] The approximate number of characters that any one passage should have. The default is 400. The minimum is 50. The maximum is 2000.
  */
 DiscoveryV1.prototype.query = function(params, callback) {
   params = params || {};
@@ -636,7 +681,21 @@ DiscoveryV1.prototype.query = function(params, callback) {
       method: 'GET',
       json: true,
       path: pick(params, ['environment_id', 'collection_id']),
-      qs: pick(params, ['query', 'natural_language_query', 'filter', 'aggregation', 'count', 'offset', 'return', 'sort', 'passages','highlight'])
+      qs: pick(params, [
+        'query',
+        'natural_language_query',
+        'filter',
+        'aggregation',
+        'count',
+        'offset',
+        'return',
+        'sort',
+        'passages',
+        'highlight',
+        'passages.fields',
+        'passages.count',
+        'passages.characters'
+      ])
     },
     requiredParams: ['environment_id', 'collection_id'],
     defaultOptions: this._options
